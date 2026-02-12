@@ -12,7 +12,7 @@ from html import escape
 import re
 
 # Configuration
-FEED_URL = "https://hanzo2401.github.io/deel-job-feed/feeds/jobs.json"
+FEED_URL = "https://zonos.github.io/deel-job-feed/feeds/jobs.json"
 OUTPUT_DIR = Path("careers")
 COMPANY_NAME = "Zonos"
 COMPANY_URL = "https://www.zonos.com"
@@ -270,7 +270,7 @@ def generate_job_page(job, index=0):
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="careers.css">
+    <link rel="stylesheet" href="/careers/careers.css">
 
     <!-- Structured Data for Job Posting -->
     <script type="application/ld+json">
@@ -406,7 +406,7 @@ def generate_index_page(jobs):
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="careers.css">
+    <link rel="stylesheet" href="/careers/careers.css">
 
     <!-- Open Graph -->
     <meta property="og:title" content="Careers at {COMPANY_NAME}">
