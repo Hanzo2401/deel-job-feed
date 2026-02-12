@@ -284,8 +284,7 @@ def generate_job_page(job, index=0):
                 <img src="zonos-logo-black.png" alt="{COMPANY_NAME}" />
             </a>
             <nav>
-                <a href="{COMPANY_URL}">Zonos.com</a>
-                <a href="{COMPANY_URL}/careers/">Careers</a>
+                <a href="index.html">← All Jobs</a>
             </nav>
         </div>
     </header>
@@ -427,7 +426,6 @@ def generate_index_page(jobs):
                 <img src="zonos-logo-black.png" alt="{COMPANY_NAME}" />
             </a>
             <nav>
-                <a href="{COMPANY_URL}">Zonos.com</a>
                 <a href="{COMPANY_URL}/careers/" class="active">Careers</a>
             </nav>
         </div>
