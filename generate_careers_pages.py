@@ -41,7 +41,9 @@ def fetch_jobs():
         for job in jobs_list:
             # Normalize field names from JSON feed
             raw_title = job.get('title', '')
+            raw_description = job.get('description', '')
             cleaned_title = clean_job_title(raw_title)
+            cleaned_description = clean_job_description(raw_description)
 
             normalized_job = {
                 'title': cleaned_title,
@@ -52,7 +54,7 @@ def fetch_jobs():
                 'country': job.get('country', 'US'),
                 'jobtype': job.get('jobtype', job.get('job_type', 'Full-time')),
                 'date': job.get('date', job.get('date_posted', '')),
-                'description': job.get('description', ''),
+                'description': cleaned_description,
                 'id': job.get('id', job.get('referencenumber', '')),
             }
 
@@ -92,6 +94,20 @@ def clean_job_title(title):
     title = re.split(r'\s*[·•]\s*Full-time', title, flags=re.IGNORECASE)[0]
     title = re.split(r'\s*[·•]\s*Part-time', title, flags=re.IGNORECASE)[0]
     return title.strip()
+
+def clean_job_description(description):
+    """Clean job description by removing unwanted text"""
+    # Remove "Department" and related text patterns
+    description = re.sub(r'Department\s*[·•]\s*[^·•\n]+', '', description, flags=re.IGNORECASE)
+    description = re.sub(r'\bDepartment\b[·•\s-]*', '', description, flags=re.IGNORECASE)
+    # Remove standalone "Remote" or "Full-time" mentions
+    description = re.sub(r'\s*[·•]\s*Remote\s*[·•]?\s*', ' ', description, flags=re.IGNORECASE)
+    description = re.sub(r'\s*[·•]\s*Full-time\s*[·•]?\s*', ' ', description, flags=re.IGNORECASE)
+    description = re.sub(r'\s*[·•]\s*Part-time\s*[·•]?\s*', ' ', description, flags=re.IGNORECASE)
+    # Clean up extra spaces and bullets
+    description = re.sub(r'\s+', ' ', description)
+    description = re.sub(r'[·•]\s*$', '', description)
+    return description.strip()
 
 def format_date_iso(date_str):
     """Convert date to ISO format for schema.org"""
