@@ -99,6 +99,16 @@ def clean_job_title(title):
     title = re.split(r'\s*[·•]\s*Part-time', title, flags=re.IGNORECASE)[0]
     return title.strip()
 
+def format_title_with_breaks(title):
+    """Add natural line breaks to job titles for better display"""
+    # Add line break before opening parenthesis if title is long enough
+    if '(' in title and len(title) > 30:
+        title = re.sub(r'\s*\(', '<br>(', title)
+    # Add line break before " - " if present
+    if ' - ' in title and len(title) > 35:
+        title = re.sub(r'\s*-\s*', '<br>- ', title, count=1)
+    return title
+
 def clean_job_description(description, title=''):
     """Clean job description by removing unwanted text"""
     # Remove "Department" and related text patterns
@@ -244,6 +254,9 @@ def generate_job_page(job, index=0):
     # Generate schema
     schema_json = generate_job_schema(job, job_url)
 
+    # Format title with line breaks
+    formatted_title = format_title_with_breaks(job.get('title', ''))
+
     # Build HTML
     html = f"""<!DOCTYPE html>
 <html lang="en">
@@ -281,7 +294,7 @@ def generate_job_page(job, index=0):
         <div class="container">
             <article>
                 <header class="job-header">
-                    <h1>{escape(job.get('title', ''))}</h1>
+                    <h1>{formatted_title}</h1>
                     <div class="job-meta">
                         <span class="meta-item">
                             <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -363,9 +376,11 @@ def generate_index_page(jobs):
         else:
             location_display = "St. George, UT"  # Default to main office
 
+        formatted_title = format_title_with_breaks(job.get('title', ''))
+
         job_cards_html += f"""
                 <article class="job-card">
-                    <h3><a href="{filename}">{escape(job.get('title', ''))}</a></h3>
+                    <h3><a href="{filename}">{formatted_title}</a></h3>
                     <div class="job-card-meta">
                         <span class="location">{escape(location_display)}</span>
                         <span class="type">{escape(job.get('jobtype', 'Full-time'))}</span>
