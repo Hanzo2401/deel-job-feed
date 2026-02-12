@@ -247,6 +247,7 @@ body {
     color: var(--text-light);
     margin-bottom: 1.5rem;
     flex-grow: 1;
+    display: none; /* Hidden since descriptions are just title repeated */
 }
 
 .no-jobs {

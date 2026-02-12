@@ -35,44 +35,48 @@ def fetch_jobs():
             jobs_list = []
 
         # Extract unique jobs (avoid duplicates)
-        seen_ids = set()
-        unique_jobs = []
+        # Use URL with job-details as the unique key (prefer detailed URLs)
+        seen_urls = {}
 
         for job in jobs_list:
-            # Normalize field names from JSON feed
             raw_title = job.get('title', '')
             raw_description = job.get('description', '')
+            raw_job_type = job.get('jobtype', job.get('job_type', 'Full-time'))
+
             cleaned_title = clean_job_title(raw_title)
-            cleaned_description = clean_job_description(raw_description)
+            cleaned_description = clean_job_description(raw_description, cleaned_title)
+            cleaned_job_type = clean_job_type(raw_job_type)
 
-            normalized_job = {
-                'title': cleaned_title,
-                'url': job.get('url', ''),
-                'location': job.get('location', ''),
-                'city': job.get('city', job.get('location', '')),
-                'state': job.get('state', ''),
-                'country': job.get('country', 'US'),
-                'jobtype': job.get('jobtype', job.get('job_type', 'Full-time')),
-                'date': job.get('date', job.get('date_posted', '')),
-                'description': cleaned_description,
-                'id': job.get('id', job.get('referencenumber', '')),
-            }
+            url = job.get('url', '')
 
-            # Generate ID from URL if not present
-            if not normalized_job['id'] and normalized_job['url']:
-                # Extract ID from URL like .../job-details/815a46a0-...
-                import re
-                match = re.search(r'/job-details/([a-f0-9-]+)', normalized_job['url'])
+            # Extract ID from URL
+            job_id = job.get('id', job.get('referencenumber', ''))
+            if not job_id and url:
+                match = re.search(r'/job-details/([a-f0-9-]+)', url)
                 if match:
-                    normalized_job['id'] = match.group(1)
+                    job_id = match.group(1)
                 else:
-                    # Use hash of title + url as fallback
-                    normalized_job['id'] = str(hash(normalized_job['title'] + normalized_job['url']))[:8]
+                    job_id = str(hash(cleaned_title + url))[:8]
 
-            job_id = normalized_job['id']
-            if job_id and job_id not in seen_ids:
-                seen_ids.add(job_id)
-                unique_jobs.append(normalized_job)
+            # Use title as unique key (prefer URLs with job-details)
+            unique_key = cleaned_title.lower()
+
+            # If we haven't seen this job, or this version has a better URL, use it
+            if unique_key not in seen_urls or '/job-details/' in url:
+                seen_urls[unique_key] = {
+                    'title': cleaned_title,
+                    'url': url,
+                    'location': job.get('location', ''),
+                    'city': job.get('city', job.get('location', '')),
+                    'state': job.get('state', ''),
+                    'country': job.get('country', 'US'),
+                    'jobtype': cleaned_job_type,
+                    'date': job.get('date', job.get('date_posted', '')),
+                    'description': cleaned_description,
+                    'id': job_id,
+                }
+
+        unique_jobs = list(seen_urls.values())
 
         return unique_jobs
     except Exception as e:
@@ -95,7 +99,7 @@ def clean_job_title(title):
     title = re.split(r'\s*[·•]\s*Part-time', title, flags=re.IGNORECASE)[0]
     return title.strip()
 
-def clean_job_description(description):
+def clean_job_description(description, title=''):
     """Clean job description by removing unwanted text"""
     # Remove "Department" and related text patterns
     description = re.sub(r'Department\s*[·•]\s*[^·•\n]+', '', description, flags=re.IGNORECASE)
@@ -107,7 +111,29 @@ def clean_job_description(description):
     # Clean up extra spaces and bullets
     description = re.sub(r'\s+', ' ', description)
     description = re.sub(r'[·•]\s*$', '', description)
-    return description.strip()
+    cleaned = description.strip()
+
+    # If description is just the title repeated, return empty string
+    if title and cleaned.lower() == title.lower():
+        return ''
+
+    return cleaned
+
+def clean_job_type(job_type):
+    """Clean job type field by removing location and extra text"""
+    # Remove everything after and including "Department"
+    job_type = re.split(r'Department\s*[·•]', job_type, flags=re.IGNORECASE)[0]
+    # Remove location patterns like "St.George UT"
+    job_type = re.sub(r'\s*[·•]\s*[A-Z][a-z]+\.?\s*[A-Z]{2}\s*', '', job_type)
+    # Remove Remote, Full-time, Part-time
+    job_type = re.sub(r'\s*[·•]?\s*(Remote|Full-time|Part-time)\s*[·•]?\s*', '', job_type, flags=re.IGNORECASE)
+    # Clean up
+    job_type = re.sub(r'\s+', ' ', job_type)
+    job_type = re.sub(r'[·•]\s*$', '', job_type)
+    cleaned = job_type.strip()
+
+    # Default to "Full-time" if empty
+    return cleaned if cleaned else 'Full-time'
 
 def format_date_iso(date_str):
     """Convert date to ISO format for schema.org"""
@@ -277,12 +303,18 @@ def generate_job_page(job, index=0):
                     </div>
                 </header>
 
-                <section class="job-description">
+                {f'''<section class="job-description">
                     <h2>About the Position</h2>
                     <div class="description-content">
-                        {job.get('description', '<p>No description available.</p>')}
+                        <p>We're looking for a talented professional to join our team in this role. This position offers an opportunity to work with cutting-edge technology and contribute to our mission of creating trust in global trade.</p>
+                        <p>For detailed information about responsibilities, qualifications, and benefits, please click "Apply Now" to view the full job posting.</p>
                     </div>
-                </section>
+                </section>''' if not job.get('description') else f'''<section class="job-description">
+                    <h2>About the Position</h2>
+                    <div class="description-content">
+                        {job.get('description')}
+                    </div>
+                </section>'''}
 
                 <section class="job-apply">
                     <h2>Ready to Join the Team?</h2>
@@ -329,11 +361,6 @@ def generate_index_page(jobs):
         else:
             location_display = "Multiple Locations"
 
-        # Truncate description
-        description = job.get('description', '')
-        if len(description) > 200:
-            description = description[:200] + '...'
-
         job_cards_html += f"""
                 <article class="job-card">
                     <h3><a href="{filename}">{escape(job.get('title', ''))}</a></h3>
@@ -341,7 +368,6 @@ def generate_index_page(jobs):
                         <span class="location">{escape(location_display)}</span>
                         <span class="type">{escape(job.get('jobtype', 'Full-time'))}</span>
                     </div>
-                    <p class="job-card-description">{escape(description)}</p>
                     <a href="{filename}" class="btn btn-secondary">View Details</a>
                 </article>"""
 
