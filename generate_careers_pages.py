@@ -284,7 +284,7 @@ def generate_job_page(job, index=0):
                 <img src="/careers/zonos-logo-black.png" alt="{COMPANY_NAME}" />
             </a>
             <nav>
-                <a href="index.html">← All Jobs</a>
+                <a href="/careers/">← All Jobs</a>
             </nav>
         </div>
     </header>
@@ -379,12 +379,12 @@ def generate_index_page(jobs):
 
         job_cards_html += f"""
                 <article class="job-card">
-                    <h3><a href="{filename}">{formatted_title}</a></h3>
+                    <h3><a href="/careers/{filename}">{formatted_title}</a></h3>
                     <div class="job-card-meta">
                         <span class="location">{escape(location_display)}</span>
                         <span class="type">{escape(job.get('jobtype', 'Full-time'))}</span>
                     </div>
-                    <a href="{filename}" class="btn btn-secondary">View Details</a>
+                    <a href="/careers/{filename}" class="btn btn-secondary">View Details</a>
                 </article>"""
 
     if not job_cards_html:
