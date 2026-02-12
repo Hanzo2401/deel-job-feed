@@ -64,6 +64,71 @@ def fetch_job_page_with_browser():
 
         return html_content
 
+def fetch_job_details(job_url):
+    """Fetch full job description from detail page"""
+    if not job_url or '/job-details/' not in job_url:
+        return None
+
+    print(f"  ⏳ Fetching details from {job_url}...")
+
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            page = browser.new_page()
+
+            # Navigate to job detail page
+            page.goto(job_url, wait_until='domcontentloaded', timeout=30000)
+
+            # Wait for React app to load - much longer wait for SPA
+            print("    ⏳ Waiting for React content to render...")
+            time.sleep(10)
+
+            # Try to wait for meaningful content to appear
+            try:
+                page.wait_for_function("document.body.innerText.length > 500", timeout=20000)
+                print("    ✓ Content rendered")
+            except:
+                print("    ⚠ Timeout waiting for content, proceeding anyway...")
+
+            # Additional wait for good measure
+            time.sleep(5)
+
+            # Get HTML
+            html_content = page.content()
+            browser.close()
+
+            # Parse the page
+            soup = BeautifulSoup(html_content, 'html.parser')
+
+            # Get all text from the page body
+            body_text = soup.get_text(separator='\n', strip=True)
+
+            # Filter out navigation and footer text
+            lines = body_text.split('\n')
+
+            # Look for description-like content (paragraphs with substantial text)
+            description_lines = []
+            skip_keywords = ['cookie', 'privacy', 'terms', 'back to', 'apply', 'sign in', 'menu', 'navigation']
+
+            for line in lines:
+                line = line.strip()
+                # Skip short lines, navigation items, and common UI text
+                if len(line) > 50 and not any(keyword in line.lower() for keyword in skip_keywords):
+                    description_lines.append(line)
+
+            description = '\n\n'.join(description_lines)
+
+            if description and len(description) > 100:
+                print(f"    ✓ Found description ({len(description)} characters)")
+                return description
+            else:
+                print(f"    ⚠ No substantial description found")
+                return None
+
+    except Exception as e:
+        print(f"    ✗ Error fetching job details: {e}")
+        return None
+
 def parse_jobs(html_content):
     """Parse job listings from HTML"""
     soup = BeautifulSoup(html_content, 'html.parser')
@@ -173,7 +238,14 @@ def parse_jobs(html_content):
             # Default values
             job['company'] = COMPANY_NAME
             job['date_posted'] = datetime.now().strftime('%Y-%m-%d')
-            job['description'] = job['title']  # Use title as description for now
+
+            # Fetch full job description if we have a detail URL
+            full_description = None
+            if job.get('url') and '/job-details/' in job['url']:
+                full_description = fetch_job_details(job['url'])
+
+            # Use full description if available, otherwise use title
+            job['description'] = full_description if full_description else job['title']
 
             # Add to list
             jobs.append(job)
