@@ -40,8 +40,11 @@ def fetch_jobs():
 
         for job in jobs_list:
             # Normalize field names from JSON feed
+            raw_title = job.get('title', '')
+            cleaned_title = clean_job_title(raw_title)
+
             normalized_job = {
-                'title': job.get('title', ''),
+                'title': cleaned_title,
                 'url': job.get('url', ''),
                 'location': job.get('location', ''),
                 'city': job.get('city', job.get('location', '')),
@@ -80,6 +83,15 @@ def slugify(text):
     text = re.sub(r'[^\w\s-]', '', text)
     text = re.sub(r'[-\s]+', '-', text)
     return text.strip('-')
+
+def clean_job_title(title):
+    """Clean job title by removing unwanted suffixes"""
+    # Remove everything after common delimiters
+    title = re.split(r'Department\s*[·•]|Department\s*-', title, flags=re.IGNORECASE)[0]
+    title = re.split(r'\s*[·•]\s*Remote', title, flags=re.IGNORECASE)[0]
+    title = re.split(r'\s*[·•]\s*Full-time', title, flags=re.IGNORECASE)[0]
+    title = re.split(r'\s*[·•]\s*Part-time', title, flags=re.IGNORECASE)[0]
+    return title.strip()
 
 def format_date_iso(date_str):
     """Convert date to ISO format for schema.org"""
@@ -177,13 +189,11 @@ def generate_job_page(job, index=0):
 
     location_info = extract_location_parts(job)
 
-    # Format location display
-    if location_info['is_remote']:
-        location_display = "Remote"
-        if location_info['city'] and location_info['city'].lower() != 'remote':
-            location_display += f" ({location_info['city']}, {location_info['state']})"
-    else:
+    # Format location display - don't show "Remote", show actual office location
+    if location_info['city'] and location_info['city'].lower() != 'remote':
         location_display = f"{location_info['city']}, {location_info['state']}"
+    else:
+        location_display = "Multiple Locations"
 
     # Generate schema
     schema_json = generate_job_schema(job, job_url)
@@ -215,7 +225,8 @@ def generate_job_page(job, index=0):
                 <img src="zonos-logo-black.png" alt="{COMPANY_NAME}" />
             </a>
             <nav>
-                <a href="{COMPANY_URL}/careers/">← Back to Careers</a>
+                <a href="{COMPANY_URL}">Zonos.com</a>
+                <a href="{COMPANY_URL}/careers/">Careers</a>
             </nav>
         </div>
     </header>
@@ -259,7 +270,7 @@ def generate_job_page(job, index=0):
 
                 <section class="job-apply">
                     <h2>Ready to Join the Team?</h2>
-                    <p>Become a Zonut and help us build a great company that creates trust in global trade. We're looking for people who align with our values and are passionate about making international commerce accessible to everyone.</p>
+                    <p>Become a Zonut and help us build a great company that creates trust in global trade. We're always striving to be a great company, not just a big company, and we're looking for talented people who are passionate about making cross-border commerce accessible to everyone.</p>
                     <a href="{escape(job.get('url', '#'))}" class="btn btn-primary" target="_blank" rel="noopener">Apply for this Position</a>
                 </section>
             </article>
@@ -294,10 +305,13 @@ def generate_index_page(jobs):
         filename = f"{slug}-{job_id}.html"
 
         location_info = extract_location_parts(job)
-        if location_info['is_remote']:
-            location_display = "Remote"
-        else:
+        # Don't show "Remote" as location, show actual office location if available
+        if location_info['is_remote'] and location_info['city'] and location_info['city'].lower() != 'remote':
             location_display = f"{location_info['city']}, {location_info['state']}"
+        elif not location_info['is_remote'] and location_info['city']:
+            location_display = f"{location_info['city']}, {location_info['state']}"
+        else:
+            location_display = "Multiple Locations"
 
         # Truncate description
         description = job.get('description', '')
@@ -354,7 +368,7 @@ def generate_index_page(jobs):
                 <img src="zonos-logo-black.png" alt="{COMPANY_NAME}" />
             </a>
             <nav>
-                <a href="{COMPANY_URL}">Home</a>
+                <a href="{COMPANY_URL}">Zonos.com</a>
                 <a href="{COMPANY_URL}/careers/" class="active">Careers</a>
             </nav>
         </div>

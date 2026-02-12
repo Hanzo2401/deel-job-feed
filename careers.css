@@ -191,7 +191,7 @@ body {
     left: 0;
     width: 4px;
     height: 100%;
-    background: var(--gradient-primary);
+    background: #000000;
     opacity: 0;
     transition: var(--transition);
 }
