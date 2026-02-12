@@ -100,23 +100,87 @@ def fetch_job_details(job_url):
             # Parse the page
             soup = BeautifulSoup(html_content, 'html.parser')
 
-            # Get all text from the page body
-            body_text = soup.get_text(separator='\n', strip=True)
+            # Get all body text
+            body_text = soup.get_text(separator=' ', strip=True)
 
-            # Filter out navigation and footer text
-            lines = body_text.split('\n')
+            # Skip keywords for filtering
+            skip_patterns = [
+                'cookie', 'privacy policy', 'terms', 'back to', 'apply now',
+                'sign in', 'log in', 'select one', 'your answer', 'upload',
+                'attach resume', 'submit application', '/500', '/1000',
+                'legally authorized', 'willing to relocate', 'please upload',
+                'are you willing', 'preferably as a pdf', 'acknowledge that my personal'
+            ]
 
-            # Look for description-like content (paragraphs with substantial text)
-            description_lines = []
-            skip_keywords = ['cookie', 'privacy', 'terms', 'back to', 'apply', 'sign in', 'menu', 'navigation']
+            # Split into sentences first
+            import re
+            # Split on periods followed by capital letters, question marks, or exclamation points
+            sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', body_text)
 
-            for line in lines:
-                line = line.strip()
-                # Skip short lines, navigation items, and common UI text
-                if len(line) > 50 and not any(keyword in line.lower() for keyword in skip_keywords):
-                    description_lines.append(line)
+            # Group sentences into logical paragraphs
+            paragraphs = []
+            current_para = []
+            job_title_count = 0
 
-            description = '\n\n'.join(description_lines)
+            for sentence in sentences:
+                sentence = sentence.strip()
+
+                # Skip empty or too short
+                if not sentence or len(sentence) < 20:
+                    continue
+
+                # Skip navigation/form text
+                if any(skip in sentence.lower() for skip in skip_patterns):
+                    continue
+
+                # Skip if it's just the job title repeated (allow first occurrence)
+                if 'Corporate Broker' in sentence and 'Department' in sentence:
+                    job_title_count += 1
+                    if job_title_count > 1:
+                        continue
+
+                # Detect section headers - be more selective
+                is_header = False
+                if len(sentence) < 100:
+                    # Check for colon at end (common in headers like "What You'll Work On:")
+                    if ':' in sentence[-5:]:
+                        is_header = True
+                    # Check for title-case phrases that are clearly section headers
+                    elif (sentence.count(' ') <= 6 and
+                          any(keyword in sentence for keyword in [
+                              'About', 'What', 'Why', 'How', 'Requirements', 'Qualifications',
+                              'Offer', 'Benefits', 'Location', 'Role', 'Position', 'Work On',
+                              'Looking For', 'We Offer', 'Life at'
+                          ])):
+                        is_header = True
+
+                if is_header:
+                    # Save current paragraph
+                    if current_para:
+                        para_text = ' '.join(current_para)
+                        if len(para_text) > 50:
+                            paragraphs.append(f'<p>{para_text}</p>')
+                        current_para = []
+                    # Add as header
+                    paragraphs.append(f'<h3>{sentence.rstrip(":")}</h3>')
+                else:
+                    # Add to current paragraph
+                    current_para.append(sentence)
+
+                    # Start new paragraph after 2-3 sentences or if paragraph is getting long
+                    if len(current_para) >= 3 or len(' '.join(current_para)) > 400:
+                        para_text = ' '.join(current_para)
+                        if len(para_text) > 50:
+                            paragraphs.append(f'<p>{para_text}</p>')
+                        current_para = []
+
+            # Add any remaining paragraph
+            if current_para:
+                para_text = ' '.join(current_para)
+                if len(para_text) > 50:
+                    paragraphs.append(f'<p>{para_text}</p>')
+
+            description = '\n\n'.join(paragraphs)
 
             if description and len(description) > 100:
                 print(f"    ✓ Found description ({len(description)} characters)")
