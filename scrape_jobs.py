@@ -100,87 +100,125 @@ def fetch_job_details(job_url):
             # Parse the page
             soup = BeautifulSoup(html_content, 'html.parser')
 
-            # Get all body text
-            body_text = soup.get_text(separator=' ', strip=True)
+            # Get all text content
+            body_text = soup.get_text(separator='\n', strip=True)
 
-            # Skip keywords for filtering
-            skip_patterns = [
-                'cookie', 'privacy policy', 'terms', 'back to', 'apply now',
-                'sign in', 'log in', 'select one', 'your answer', 'upload',
-                'attach resume', 'submit application', '/500', '/1000',
-                'legally authorized', 'willing to relocate', 'please upload',
-                'are you willing', 'preferably as a pdf', 'acknowledge that my personal'
-            ]
-
-            # Split into sentences first
             import re
-            # Split on periods followed by capital letters, question marks, or exclamation points
-            sentences = re.split(r'(?<=[.!?])\s+(?=[A-Z])', body_text)
 
-            # Group sentences into logical paragraphs
-            paragraphs = []
-            current_para = []
-            job_title_count = 0
+            # Simpler approach: extract each section individually
+            def extract_section(text, start_marker, end_marker=None):
+                """Extract text between start and end markers"""
+                start_idx = text.lower().find(start_marker.lower())
+                if start_idx < 0:
+                    return ''
 
-            for sentence in sentences:
-                sentence = sentence.strip()
+                start_idx += len(start_marker)
 
-                # Skip empty or too short
-                if not sentence or len(sentence) < 20:
-                    continue
+                if end_marker:
+                    end_idx = text.lower().find(end_marker.lower(), start_idx)
+                    if end_idx > start_idx:
+                        return text[start_idx:end_idx].strip()
 
-                # Skip navigation/form text
-                if any(skip in sentence.lower() for skip in skip_patterns):
-                    continue
+                return text[start_idx:].strip()
 
-                # Skip if it's just the job title repeated (allow first occurrence)
-                if 'Corporate Broker' in sentence and 'Department' in sentence:
-                    job_title_count += 1
-                    if job_title_count > 1:
+            description_html = []
+
+            # Extract intro (from "At Zonos" to "About the Role")
+            intro_start = body_text.lower().find('at zonos')
+            intro_end = body_text.lower().find('about the role')
+            if intro_start >= 0 and intro_end > intro_start:
+                intro = body_text[intro_start:intro_end].strip()
+                # Protect "St. George" from being split
+                intro = intro.replace('St. George', 'St__George')
+                # Split into sentences for paragraphs
+                sentences = [s.strip() for s in re.split(r'(?<=[.!?])\s+', intro) if len(s.strip()) > 20]
+                para = []
+                for sent in sentences:
+                    # Restore "St. George"
+                    sent = sent.replace('St__George', 'St. George')
+                    if any(skip in sent.lower() for skip in ['javascript', 'overview', 'application']):
                         continue
+                    para.append(sent)
+                    if len(para) >= 2 or len(' '.join(para)) > 300:
+                        description_html.append(f'<p>{" ".join(para)}</p>')
+                        para = []
+                if para:
+                    description_html.append(f'<p>{" ".join(para)}</p>')
 
-                # Detect section headers - be more selective
-                is_header = False
-                if len(sentence) < 100:
-                    # Check for colon at end (common in headers like "What You'll Work On:")
-                    if ':' in sentence[-5:]:
-                        is_header = True
-                    # Check for title-case phrases that are clearly section headers
-                    elif (sentence.count(' ') <= 6 and
-                          any(keyword in sentence for keyword in [
-                              'About', 'What', 'Why', 'How', 'Requirements', 'Qualifications',
-                              'Offer', 'Benefits', 'Location', 'Role', 'Position', 'Work On',
-                              'Looking For', 'We Offer', 'Life at'
-                          ])):
-                        is_header = True
+            # Extract About the Role
+            about_start = body_text.lower().find('about the role')
+            about_end = body_text.lower().find('what you\'ll work on')
+            if about_start >= 0 and about_end > about_start:
+                about = body_text[about_start + len('about the role'):about_end].strip()
+                description_html.append('<h3>About the Role</h3>')
+                description_html.append(f'<p>{about}</p>')
 
-                if is_header:
-                    # Save current paragraph
-                    if current_para:
-                        para_text = ' '.join(current_para)
-                        if len(para_text) > 50:
-                            paragraphs.append(f'<p>{para_text}</p>')
-                        current_para = []
-                    # Add as header
-                    paragraphs.append(f'<h3>{sentence.rstrip(":")}</h3>')
+            # Extract What You'll Work On (should be a list)
+            work_start = body_text.lower().find('what you\'ll work on')
+            work_end = body_text.lower().find('why this role')
+            if work_start >= 0 and work_end > work_start:
+                work_on = body_text[work_start + len('what you\'ll work on'):work_end].strip()
+                description_html.append('<h3>What You\'ll Work On</h3>')
+                lines = [l.strip() for l in work_on.split('\n') if l.strip() and len(l.strip()) > 15]
+                if len(lines) >= 3:
+                    description_html.append('<ul>')
+                    for line in lines:
+                        if len(line) < 300:
+                            description_html.append(f'<li>{line}</li>')
+                    description_html.append('</ul>')
                 else:
-                    # Add to current paragraph
-                    current_para.append(sentence)
+                    description_html.append(f'<p>{work_on}</p>')
 
-                    # Start new paragraph after 2-3 sentences or if paragraph is getting long
-                    if len(current_para) >= 3 or len(' '.join(current_para)) > 400:
-                        para_text = ' '.join(current_para)
-                        if len(para_text) > 50:
-                            paragraphs.append(f'<p>{para_text}</p>')
-                        current_para = []
+            # Extract Why This Role is Different
+            why_start = body_text.lower().find('why this role is different')
+            why_end = body_text.lower().find('what we\'re looking for')
+            if why_start >= 0 and why_end > why_start:
+                why_different = body_text[why_start + len('why this role is different'):why_end].strip()
+                description_html.append('<h3>Why This Role is Different</h3>')
+                description_html.append(f'<p>{why_different}</p>')
 
-            # Add any remaining paragraph
-            if current_para:
-                para_text = ' '.join(current_para)
-                if len(para_text) > 50:
-                    paragraphs.append(f'<p>{para_text}</p>')
+            # Extract What We're Looking For
+            looking_for = extract_section(body_text, 'What We\'re Looking For', 'Required')
+            if looking_for:
+                description_html.append('<h3>What We\'re Looking For</h3>')
+                # Split into paragraphs
+                paras = [p.strip() for p in looking_for.split('\n\n') if p.strip()]
+                for p in paras:
+                    if len(p) > 30:
+                        description_html.append(f'<p>{p.replace(chr(10), " ")}</p>')
 
-            description = '\n\n'.join(paragraphs)
+            # Extract Required (should be a list)
+            required = extract_section(body_text, 'Required:', 'What We Offer')
+            if required:
+                description_html.append('<h3>Required</h3>')
+                lines = [l.strip() for l in required.split('\n') if l.strip() and len(l.strip()) > 15]
+                # Filter out "Helpful but not required" section
+                filtered_lines = []
+                for line in lines:
+                    if 'helpful but not required' in line.lower():
+                        break
+                    if len(line) < 300:
+                        filtered_lines.append(line)
+
+                if len(filtered_lines) >= 3:
+                    description_html.append('<ul>')
+                    for line in filtered_lines:
+                        description_html.append(f'<li>{line}</li>')
+                    description_html.append('</ul>')
+
+            # Extract What We Offer (should be a list)
+            offer = extract_section(body_text, 'What We Offer', 'Life at')
+            if offer:
+                description_html.append('<h3>What We Offer</h3>')
+                lines = [l.strip() for l in offer.split('\n') if l.strip() and len(l.strip()) > 15]
+                if len(lines) >= 3:
+                    description_html.append('<ul>')
+                    for line in lines:
+                        if len(line) < 300 and not any(skip in line.lower() for skip in ['application', 'willing to relocate']):
+                            description_html.append(f'<li>{line}</li>')
+                    description_html.append('</ul>')
+
+            description = '\n'.join(description_html)
 
             if description and len(description) > 100:
                 print(f"    ✓ Found description ({len(description)} characters)")
