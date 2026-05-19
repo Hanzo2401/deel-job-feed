@@ -67,15 +67,24 @@ def fetch_jobs():
             # Use title as unique key (prefer URLs with job-details)
             unique_key = cleaned_title.lower()
 
+            # Extract city/state/country from raw title if concatenated (e.g. "Account ExecutiveGold Coast")
+            city = job.get('city', job.get('location', ''))
+            state = job.get('state', '')
+            country = job.get('country', 'US')
+            if (not city or city.lower() == 'remote') and re.search(r'Gold\s*Coast', raw_title, re.IGNORECASE):
+                city = 'Gold Coast'
+                state = 'QLD'
+                country = 'AU'
+
             # If we haven't seen this job, or this version has a better URL, use it
             if unique_key not in seen_urls or '/job-details/' in url:
                 seen_urls[unique_key] = {
                     'title': cleaned_title,
                     'url': url,
                     'location': job.get('location', ''),
-                    'city': job.get('city', job.get('location', '')),
-                    'state': job.get('state', ''),
-                    'country': job.get('country', 'US'),
+                    'city': city,
+                    'state': state,
+                    'country': country,
                     'jobtype': cleaned_job_type,
                     'date': job.get('date', job.get('date_posted', '')),
                     'description': cleaned_description,
@@ -100,6 +109,8 @@ def clean_job_title(title):
     """Clean job title by removing unwanted suffixes"""
     # Strip concatenated location suffix (no separator): "TitleSt.George UT..." or "Title(...)St.George UT..."
     title = re.sub(r'(?<=[a-zA-Z)])\s*St\.?\s*George\b.*$', '', title, flags=re.IGNORECASE)
+    # Strip concatenated Australian city names (e.g. "Account ExecutiveGold Coast")
+    title = re.sub(r'(?<=[a-zA-Z)])\s*Gold\s*Coast.*$', '', title, flags=re.IGNORECASE)
     # Strip concatenated salary suffix
     title = re.sub(r'\s*\$[\d,]+.*$', '', title)
     # Strip concatenated job type without separator
@@ -141,6 +152,10 @@ def clean_job_description(description, title=''):
         # Remove opening <p> tags that contain boilerplate
         description = re.sub(r'<p>\s*Corporate Broker[^<]*?@ Zonos \| Deel[^<]*?</p>', '', description, flags=re.IGNORECASE)
         description = re.sub(r'<p>\s*You need to enable JavaScript[^<]*?</p>', '', description, flags=re.IGNORECASE)
+
+        # Strip application form content appended to job descriptions
+        description = re.sub(r'<p>\s*Click or drag file to upload\s*</p>.*$', '', description, flags=re.IGNORECASE | re.DOTALL)
+        description = re.sub(r'<p>\s*Application Questions\s*</p>.*$', '', description, flags=re.IGNORECASE | re.DOTALL)
 
         return description.strip()
 
@@ -200,15 +215,22 @@ def extract_location_parts(job):
     # Check if remote
     is_remote = city.lower() == 'remote' or 'remote' in job.get('title', '').lower()
 
-    # Try to extract location from jobtype or description if not already set
+    # Try to extract location from jobtype or title if not already set
     if not city or city.lower() == 'remote':
         jobtype = job.get('jobtype', '')
+        raw_title = job.get('title', '')
         # Look for location patterns like "St.George UT" or "St. George, UT"
         location_match = re.search(r'(St\.?\s*George)\s*,?\s*(UT|Utah)', jobtype, re.IGNORECASE)
         if location_match:
             city = 'St. George'
             state = 'UT'
-            is_remote = False  # If we found a specific location, it's not just remote
+            is_remote = False
+        # Extract Gold Coast from concatenated title (e.g. "Account ExecutiveGold Coast")
+        elif re.search(r'Gold\s*Coast', raw_title, re.IGNORECASE):
+            city = 'Gold Coast'
+            state = 'QLD'
+            country = 'AU'
+            is_remote = False
 
     return {
         'city': city,
@@ -285,7 +307,7 @@ def generate_job_page(job, index=0):
 
     # Format location display - show actual office location
     if location_info['city'] and location_info['city'].lower() != 'remote':
-        location_display = f"{location_info['city']}, {location_info['state']}"
+        location_display = f"{location_info['city']}, {location_info['state']}" if location_info['state'] else location_info['city']
     else:
         location_display = "St. George, UT"  # Default to main office
 
@@ -407,7 +429,7 @@ def generate_index_page(jobs):
         location_info = extract_location_parts(job)
         # Show the actual office location
         if location_info['city'] and location_info['city'].lower() != 'remote':
-            location_display = f"{location_info['city']}, {location_info['state']}"
+            location_display = f"{location_info['city']}, {location_info['state']}" if location_info['state'] else location_info['city']
         else:
             location_display = "St. George, UT"  # Default to main office
 
